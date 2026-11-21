@@ -63,10 +63,24 @@
   .row{display:flex;gap:8px}
   #stage{
     flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    position:relative;
     background-image:radial-gradient(circle at 1px 1px,#1a1e27 1px,transparent 0);
     background-size:22px 22px;
   }
   canvas{display:block;box-shadow:0 14px 44px rgba(0,0,0,.6)}
+  #mcp{
+    position:absolute;left:18px;bottom:18px;z-index:2;
+    display:flex;align-items:center;gap:7px;
+    padding:6px 12px;border-radius:99px;font-size:11.5px;color:#5d6577;
+    background:rgba(15,18,25,.9);border:1px solid var(--line);
+    backdrop-filter:blur(8px);user-select:none;
+  }
+  #mcp::before{
+    content:"";width:6px;height:6px;border-radius:50%;
+    background:#4b5261;flex:0 0 auto;
+  }
+  #mcp.on{color:#9aa3b6}
+  #mcp.on::before{background:#3ddc84;box-shadow:0 0 7px rgba(61,220,132,.9)}
 </style>
 </head>
 <body>
@@ -109,7 +123,10 @@
   </div>
 </aside>
 
-<div id="stage"><canvas id="cv"></canvas></div>
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="mcp">WebMCP</div>
+</div>
 
 <script>
 'use strict';
@@ -656,6 +673,131 @@ new ResizeObserver(redraw).observe(stage);
 
 redraw();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(redraw);
+
+/* ---------------- WebMCP：把页面能力暴露给浏览器里的 AI agent ---------------- */
+
+function syncUI() {
+  $('title').value = state.title;
+  $('sub').value = state.sub;
+  $('brand').value = state.brand;
+  tpls.querySelectorAll('.tpl').forEach((n, i) => n.classList.toggle('on', i === state.tpl));
+  $('ratioSeg').querySelectorAll('button')
+    .forEach((n) => n.classList.toggle('on', n.dataset.r === state.ratio));
+}
+
+(function setupWebMCP() {
+  const badge = $('mcp');
+  const mc = document.modelContext;
+
+  if (!mc || typeof mc.registerTool !== 'function') {
+    badge.textContent = 'WebMCP 未启用（Chrome 需开 flag）';
+    badge.title = 'chrome://flags/#enable-webmcp-testing → Enabled → 重启浏览器';
+    return;
+  }
+
+  const json = (o) => JSON.stringify(o);
+  const pending = [];
+
+  // 只读：模板清单
+  pending.push(mc.registerTool({
+    name: 'list_cover_templates',
+    title: '列出封面模板',
+    description: '返回所有可用的视频封面风格模板（id、中文名、主色）。调用 create_cover 前可先用它挑模板。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    execute: async () => json({
+      templates: TEMPLATES.map((t) => ({ id: t.id, name: t.name, accent: t.accent })),
+      ratios: [
+        { value: 'land', size: '1920x1080', label: '16:9 横屏' },
+        { value: 'port', size: '1080x1920', label: '9:16 竖屏' },
+      ],
+    }),
+  }));
+
+  // 只读：当前状态
+  pending.push(mc.registerTool({
+    name: 'get_cover_state',
+    title: '读取当前封面状态',
+    description: '返回画布上当前显示的标题、副标题、频道名、模板和比例。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true },
+    execute: async () => json({
+      title: state.title,
+      subtitle: state.sub,
+      brand: state.brand,
+      template: TEMPLATES[state.tpl].id,
+      ratio: state.ratio,
+      size: dims().join('x'),
+    }),
+  }));
+
+  // 写入：生成封面
+  pending.push(mc.registerTool({
+    name: 'create_cover',
+    title: '生成视频封面',
+    description:
+      '用给定文字生成并渲染一张视频封面。title 中可用 **双星号** 标记需要强调的片段，用 \\n 换行。' +
+      '渲染结果会立刻显示在页面上；download 为 true 时同时下载 PNG 文件。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '封面主标题，必填' },
+        subtitle: { type: 'string', description: '副标题，可选' },
+        brand: { type: 'string', description: '左上角频道名，可选' },
+        template: { type: 'string', description: '模板 id 或中文名，见 list_cover_templates' },
+        ratio: { type: 'string', enum: ['land', 'port'], description: 'land=16:9 横屏，port=9:16 竖屏' },
+        download: { type: 'boolean', description: '是否立即下载 PNG，默认 false' },
+      },
+      required: ['title'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false },
+    execute: async (input) => {
+      const title = String(input && input.title != null ? input.title : '').trim();
+      if (!title) return json({ ok: false, error: 'title 不能为空' });
+
+      let idx = -1;
+      if (input.template) {
+        idx = TEMPLATES.findIndex((t) => t.id === input.template || t.name === input.template);
+        if (idx < 0) {
+          return json({
+            ok: false,
+            error: '未知模板：' + input.template,
+            available: TEMPLATES.map((t) => t.id),
+          });
+        }
+      }
+
+      state.title = title;
+      if (typeof input.subtitle === 'string') state.sub = input.subtitle;
+      if (typeof input.brand === 'string') state.brand = input.brand;
+      if (idx >= 0) state.tpl = idx;
+      if (input.ratio === 'land' || input.ratio === 'port') state.ratio = input.ratio;
+
+      syncUI();
+      redraw();
+
+      const [w, h] = dims();
+      if (input.download === true) savePNG();
+
+      return json({
+        ok: true,
+        template: TEMPLATES[state.tpl].id,
+        ratio: state.ratio,
+        size: w + 'x' + h,
+        downloaded: input.download === true,
+      });
+    },
+  }));
+
+  Promise.all(pending).then(() => {
+    badge.textContent = `WebMCP 已注册 ${pending.length} 个工具`;
+    badge.classList.add('on');
+  }).catch((err) => {
+    badge.textContent = 'WebMCP 注册失败';
+    badge.title = String(err && err.message || err);
+  });
+})();
 </script>
 </body>
 </html>
