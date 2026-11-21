@@ -1,0 +1,11 @@
+{
+  "name": "threebody-droplet",
+  "version": "1.0.0",
+  "description": "《三体 Ⅱ》末日之战 · 水滴 — three.js 实时演出（离线可运行，无外部素材）",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8777"
+  },
+  "keywords": ["threejs", "webgl", "three-body", "cinematic"],
+  "license": "MIT"
+}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTML Lab</title>
+<style>
+  :root{ --bg:#0b0d12; --panel:#141821; --line:#242a36; --text:#e8eaf0; --muted:#8b93a5; --accent:#4d8dff; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--text);min-height:100vh;
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;padding:64px 24px;
+  }
+  header{max-width:860px;margin:0 auto 40px}
+  h1{font-size:28px;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
+  header p{color:var(--muted);font-size:14px}
+  main{
+    max-width:860px;margin:0 auto;display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;
+  }
+  .card{
+    display:flex;flex-direction:column;gap:8px;padding:20px;border-radius:14px;
+    background:var(--panel);border:1px solid var(--line);color:inherit;
+    text-decoration:none;transition:transform .16s,border-color .16s,background .16s;
+  }
+  .card:hover{transform:translateY(-3px);border-color:var(--accent);background:#171c26}
+  .card h2{font-size:15px;font-weight:700}
+  .card p{font-size:12.5px;line-height:1.6;color:var(--muted);flex:1}
+  .card span{font-size:11px;color:var(--accent);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  footer{max-width:860px;margin:48px auto 0;font-size:12px;color:#5d6577}
+  footer a{color:#5d6577}
+</style>
+</head>
+<body>
+<header>
+  <h1>HTML Lab</h1>
+  <p>自己写的一些单页小东西，纯前端、无构建、点开即用。</p>
+</header>
+<main>
+  <a class="card" href="./video-cover/">
+    <h2>视频封面制作器</h2>
+    <p>输入主题文字自动排版，9 套风格模板，16:9 / 9:16 一键切换，导出 PNG。</p>
+    <span>video-cover</span>
+  </a>
+  <a class="card" href="./chinese-zodiac/">
+    <h2>十二生肖</h2>
+    <p>十二生肖与中国传统文化，按年份查属相与干支。</p>
+    <span>chinese-zodiac</span>
+  </a>
+  <a class="card" href="./qingming/">
+    <h2>清明上河图 · 汴京</h2>
+    <p>以北宋张择端长卷为蓝本，Three.js 实时渲染的可漫游三维长卷。</p>
+    <span>qingming</span>
+  </a>
+  <a class="card" href="./threebody-droplet/">
+    <h2>水滴 · 末日之战</h2>
+    <p>《三体 Ⅱ》末日之战的 three.js 实时演出，全部程序化生成、无外部素材。</p>
+    <span>threebody-droplet</span>
+  </a>
+</main>
+<footer>
+  源码在 <a href="https://github.com/slothvips/html-lab">GitHub</a>。
+</footer>
+</body>
+</html>

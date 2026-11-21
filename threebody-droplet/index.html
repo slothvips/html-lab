@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>水滴 · 末日之战 | 三体 Ⅱ 黑暗森林</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2c6 8 10 12 10 17a10 10 0 1 1-20 0c0-5 4-9 10-17z' fill='%239fc8e8'/%3E%3C/svg%3E" />
+<style>
+  :root{
+    --ink:#dfe9f3;
+    --dim:#7f93a8;
+    --line:rgba(150,180,210,.22);
+    --accent:#9fd8ff;
+    --warn:#ff9a4d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#000;overflow:hidden;
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,sans-serif;
+    color:var(--ink);-webkit-font-smoothing:antialiased;}
+  canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
+
+  .ui{position:fixed;pointer-events:none;z-index:10;opacity:0;transition:opacity 1.2s ease}
+  .ui.on{opacity:1}
+
+  /* ---------- telemetry : left ---------- */
+  #telL{text-shadow:0 1px 12px #000,0 0 30px rgba(0,0,0,.9);left:34px;top:30px;font-family:"SF Mono",Menlo,Consolas,monospace;font-size:11px;
+    letter-spacing:.14em;line-height:1.9;text-transform:uppercase;color:var(--dim)}
+  #telL b{display:block;color:var(--ink);font-weight:500;letter-spacing:.28em;font-size:11.5px;margin-bottom:10px}
+  #telL .row{display:flex;gap:14px;justify-content:space-between;min-width:236px}
+  #telL .v{color:#cfe4f5}
+  #telL .hr{height:1px;background:var(--line);margin:9px 0}
+  #telL .alarm{color:var(--warn)}
+  #telL .blink{animation:bl 1.1s steps(2,end) infinite}
+  @keyframes bl{50%{opacity:.25}}
+
+  /* ---------- telemetry : right ---------- */
+  #telR{text-shadow:0 1px 12px #000,0 0 30px rgba(0,0,0,.9);right:34px;top:30px;text-align:right;font-family:"SF Mono",Menlo,Consolas,monospace;
+    font-size:11px;letter-spacing:.14em;line-height:1.9;color:var(--dim)}
+  #telR b{display:block;color:var(--ink);font-weight:500;letter-spacing:.3em;margin-bottom:10px;font-size:11.5px}
+  #telR .v{color:#cfe4f5}
+  #telR .hr{height:1px;background:var(--line);margin:9px 0}
+
+  /* ---------- mission clock ---------- */
+  #clock{position:fixed;left:50%;top:26px;transform:translateX(-50%);z-index:10;
+    font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px;letter-spacing:.42em;
+    color:rgba(190,215,238,.5);opacity:0;transition:opacity 1s}
+
+  /* ---------- subtitle ---------- */
+  #sub{position:fixed;left:50%;bottom:108px;transform:translateX(-50%);z-index:12;
+    width:min(1100px,84vw);text-align:center;pointer-events:none}
+  #sub .line{
+    font-family:"Songti SC","STSong","Noto Serif SC",serif;
+    font-size:clamp(15px,1.62vw,25px);line-height:1.95;letter-spacing:.1em;
+    color:#eaf2fa;opacity:0;transform:translateY(6px);
+    transition:opacity .55s ease,transform .55s ease;
+    text-shadow:0 0 26px rgba(0,0,0,.95),0 0 90px rgba(0,0,0,.9),0 1px 2px rgba(0,0,0,.9)}
+  #sub .line.on{opacity:1;transform:translateY(0)}
+  #sub .line em{font-style:normal;color:#ffd9b0}
+
+  /* ---------- controls ---------- */
+  #ctrl{position:fixed;left:0;right:0;bottom:0;z-index:14;padding:16px 34px 18px;
+    display:flex;align-items:center;gap:18px;opacity:0;transition:opacity .8s;
+    background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,0))}
+  #ctrl.on{opacity:1}
+  #ctrl .btn{pointer-events:auto;cursor:pointer;background:none;border:1px solid var(--line);
+    color:#c8dcee;font-family:"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.16em;
+    padding:7px 13px;border-radius:2px;transition:.25s;text-transform:uppercase;white-space:nowrap}
+  #ctrl .btn:hover{border-color:rgba(159,216,255,.75);color:#fff;background:rgba(120,180,230,.09)}
+  #ctrl .btn.active{border-color:rgba(159,216,255,.8);color:#eaf6ff;background:rgba(120,180,230,.14)}
+  #bar{pointer-events:auto;flex:1;height:26px;display:flex;align-items:center;cursor:pointer;position:relative}
+  #bar .track{position:relative;width:100%;height:2px;background:rgba(160,190,220,.2)}
+  #bar .fill{position:absolute;left:0;top:0;height:100%;width:0;background:linear-gradient(90deg,#6fb4e8,#cfe9ff);box-shadow:0 0 12px rgba(140,200,255,.55)}
+  #bar .knob{position:absolute;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;
+    background:#eaf6ff;box-shadow:0 0 14px rgba(160,215,255,.9);left:0}
+  #bar .marks{position:absolute;inset:0}
+  #bar .mk{position:absolute;top:-5px;width:1px;height:12px;background:rgba(160,190,220,.35)}
+  #tc{font-family:"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.14em;color:var(--dim);min-width:104px;text-align:right}
+
+  /* ---------- intro ---------- */
+  #intro{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:0;background:radial-gradient(ellipse at 50% 52%,rgba(0,0,0,.70),rgba(0,0,0,.94) 68%);
+    transition:opacity 1.6s ease;backdrop-filter:blur(1px)}
+  #intro.hide{opacity:0;pointer-events:none}
+  #intro .kicker{font-family:"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.62em;color:rgba(150,180,210,.75);margin-bottom:26px}
+  #intro h1{font-family:"Songti SC","STSong","Noto Serif SC",serif;font-weight:400;
+    font-size:clamp(46px,7.4vw,104px);letter-spacing:.42em;text-indent:.42em;line-height:1;
+    color:#f2f8ff;text-shadow:0 0 70px rgba(140,200,255,.42)}
+  #intro .rule{width:min(560px,64vw);height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin:34px 0 22px}
+  #intro .sub2{font-family:"Songti SC","STSong",serif;font-size:clamp(13px,1.5vw,17px);letter-spacing:.5em;text-indent:.5em;color:#c3d6e6;text-shadow:0 0 24px rgba(0,0,0,.95)}
+  #intro .meta{margin-top:44px;font-family:"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.3em;color:rgba(186,212,235,.9);text-align:center;line-height:2.1;text-shadow:0 0 20px rgba(0,0,0,.95),0 1px 3px #000}
+  #begin{margin-top:46px;pointer-events:auto;cursor:pointer;background:rgba(8,14,22,.5);
+    border:1px solid rgba(159,216,255,.4);color:#e8f4ff;font-family:"SF Mono",Menlo,monospace;
+    font-size:11.5px;letter-spacing:.42em;text-indent:.42em;padding:15px 46px;border-radius:1px;transition:.35s}
+  #begin:hover{background:rgba(140,200,255,.14);border-color:rgba(200,235,255,.95);box-shadow:0 0 44px rgba(120,190,255,.28);letter-spacing:.5em}
+
+  #loading{position:fixed;inset:0;z-index:60;background:#000;display:flex;align-items:center;justify-content:center;
+    font-family:"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.5em;color:rgba(140,175,205,.7);transition:opacity .8s}
+  #loading.hide{opacity:0;pointer-events:none}
+
+  /* end title */
+  #endTitle{position:fixed;inset:0;z-index:11;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;opacity:0;transition:opacity 2.4s ease}
+  #endTitle.on{opacity:1}
+  #endTitle .box{text-align:center}
+  #endTitle .t1{font-family:"Songti SC","STSong",serif;font-size:clamp(30px,4.6vw,64px);letter-spacing:.46em;text-indent:.46em;color:#eef7ff;text-shadow:0 0 60px rgba(150,205,255,.35)}
+  #endTitle .t2{margin-top:24px;font-family:"SF Mono",Menlo,monospace;font-size:10.5px;letter-spacing:.5em;color:rgba(150,180,210,.72)}
+
+  .grain{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay}
+  @media (max-width:860px){
+    #telL,#telR{font-size:9.5px;line-height:1.7}
+    #telL{left:18px;top:18px} #telR{right:18px;top:18px}
+    #sub{bottom:92px}
+    #ctrl{padding:12px 16px 14px;gap:10px}
+    #tc{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="grain"></div>
+
+<div class="ui" id="telL">
+  <b>舰队国际 · 联合舰队</b>
+  <div class="row"><span>恒星级战舰</span><span class="v" id="fleetNum">2000</span></div>
+  <div class="row"><span>方阵</span><span class="v">4900 × 3510 km</span></div>
+  <div class="row"><span>舰间距</span><span class="v">100 km</span></div>
+  <div class="hr"></div>
+  <div class="row"><span>状态</span><span class="v" id="fleetState">列阵待命</span></div>
+  <div class="row"><span>距木星</span><span class="v">1.42 AU</span></div>
+</div>
+
+<div class="ui" id="telR">
+  <b>目标 · 探测器</b>
+  <div class="row"><span>长度</span><span class="v">3.5 m</span></div>
+  <div class="row"><span>表面反射率</span><span class="v">100%</span></div>
+  <div class="row"><span>表面粗糙度</span><span class="v">0</span></div>
+  <div class="hr"></div>
+  <div class="row"><span>温度</span><span class="v">−272 °C</span></div>
+  <div class="row"><span>速度</span><span class="v" id="dropSpeed">0 km/s</span></div>
+</div>
+
+<div id="clock">T+ 00:00</div>
+
+<div id="sub"><div class="line" id="subLine"></div></div>
+
+<div id="ctrl">
+  <button class="btn" id="btnPlay">暂停</button>
+  <button class="btn" id="btnReplay">重播</button>
+  <div id="bar">
+    <div class="track"><div class="fill" id="fill"></div><div class="marks" id="marks"></div><div class="knob" id="knob"></div></div>
+  </div>
+  <div id="tc">00:00 / 01:22</div>
+  <button class="btn active" id="btnSound">声音 开</button>
+  <button class="btn" id="btnFree">自由视角</button>
+</div>
+
+<div id="endTitle">
+  <div class="box">
+    <div class="t1">末日之战</div>
+    <div class="t2">五艘战舰逃离 · 自然选择号 · 蓝色空间号 · 青铜时代号 · 量子号 · 企业号</div>
+  </div>
+</div>
+
+<div id="intro">
+  <div class="kicker">刘慈欣 · 三体 Ⅱ · 黑暗森林</div>
+  <h1>水滴</h1>
+  <div class="rule"></div>
+  <div class="sub2">末日之战 · 木星轨道</div>
+  <div class="meta">联合舰队 2000 艘恒星级战舰<br>目标：一枚 3.5 米长的探测器</div>
+  <button id="begin">进入战场</button>
+</div>
+
+<div id="loading">正在构建战场…</div>
+
+<script type="importmap">
+{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/addons/"}}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

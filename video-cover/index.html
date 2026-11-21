@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>视频封面制作器</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#151821; --panel2:#1c2029; --line:#2a2f3b;
+    --text:#e8eaf0; --muted:#8b93a5; --accent:#4d8dff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  aside{
+    width:330px;flex:0 0 330px;background:var(--panel);
+    border-right:1px solid var(--line);display:flex;flex-direction:column;
+    overflow-y:auto;padding:20px;
+  }
+  aside::-webkit-scrollbar{width:8px}
+  aside::-webkit-scrollbar-thumb{background:#2b3140;border-radius:4px}
+  h1{font-size:15px;font-weight:700;letter-spacing:.02em;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  h1::before{content:"";width:4px;height:15px;background:var(--accent);border-radius:2px}
+  .field{margin-bottom:15px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  .hint{font-size:11px;color:#5d6577;margin-top:5px;line-height:1.5}
+  textarea,input{
+    width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    color:var(--text);padding:10px 12px;font:inherit;font-size:13.5px;
+    resize:vertical;transition:border-color .15s;
+  }
+  textarea{min-height:72px;line-height:1.55}
+  textarea:focus,input:focus{outline:none;border-color:var(--accent)}
+  .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:3px;gap:3px}
+  .seg button{
+    flex:1;padding:7px;border:0;border-radius:6px;background:transparent;
+    color:var(--muted);font:inherit;font-size:12px;cursor:pointer;transition:.15s;
+  }
+  .seg button.on{background:#2b3140;color:var(--text)}
+  .tpls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .tpl{
+    position:relative;height:46px;border-radius:8px;overflow:hidden;cursor:pointer;
+    border:2px solid transparent;transition:.15s;display:flex;align-items:flex-end;padding:7px 9px;
+  }
+  .tpl:hover{transform:translateY(-1px)}
+  .tpl.on{border-color:var(--accent)}
+  .tpl span{font-size:11px;font-weight:700;position:relative;z-index:1;letter-spacing:.02em}
+  .tpl i{
+    position:absolute;top:8px;right:8px;width:9px;height:9px;border-radius:50%;
+    box-shadow:0 0 0 3px rgba(255,255,255,.14);
+  }
+  .btn{
+    width:100%;padding:11px;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);font:inherit;font-size:13px;cursor:pointer;transition:.15s;
+  }
+  .btn:hover{background:#242a36}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.primary:hover{background:#3d7cf0}
+  .row{display:flex;gap:8px}
+  #stage{
+    flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;
+    background-image:radial-gradient(circle at 1px 1px,#1a1e27 1px,transparent 0);
+    background-size:22px 22px;
+  }
+  canvas{display:block;box-shadow:0 14px 44px rgba(0,0,0,.6)}
+</style>
+</head>
+<body>
+
+<aside>
+  <h1>视频封面制作器</h1>
+
+  <div class="field">
+    <label>画布比例</label>
+    <div class="seg" id="ratioSeg">
+      <button data-r="land" class="on">16 : 9 横屏</button>
+      <button data-r="port">9 : 16 竖屏</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="title">主题文字</label>
+    <textarea id="title" spellcheck="false"></textarea>
+    <div class="hint">用 <b>**文字**</b> 包住要强调的部分，回车换行</div>
+  </div>
+
+  <div class="field">
+    <label for="sub">副标题（可选）</label>
+    <input id="sub" spellcheck="false" placeholder="副标题 / 补充说明">
+  </div>
+
+  <div class="field">
+    <label for="brand">频道名（可选）</label>
+    <input id="brand" spellcheck="false" placeholder="左上角角标">
+  </div>
+
+  <div class="field">
+    <label>风格模板</label>
+    <div class="tpls" id="tpls"></div>
+  </div>
+
+  <div class="row">
+    <button class="btn" id="shuffle">🎲 换一版</button>
+    <button class="btn primary" id="save">⬇ 下载 PNG</button>
+  </div>
+</aside>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<script>
+'use strict';
+
+const FONT = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif';
+const LINE_RATIO = 1.24;
+const NO_START = '，。、：；！？）」』】》〉”’…·%,.;:!?)]}';
+
+const TEMPLATES = [
+  { id:'neon',    name:'霓虹科技', bg:['#060a16','#12294d'], accent:['#22d3ee','#f43f8e'], ink:'#ffffff', dark:true,  deco:'grid',    anchor:'bottom', fill:'gradient' },
+  { id:'minimal', name:'极简大字', bg:['#faf8f2','#ebe5d8'], accent:['#e0572f','#16150f'], ink:'#16150f', dark:false, deco:'none',    anchor:'center', fill:'solid' },
+  { id:'mag',     name:'杂志撞色', bg:['#f2e8d5','#e1d2ba'], accent:['#d7263d','#1b1b3a'], ink:'#16161a', dark:false, deco:'stripes', anchor:'center', fill:'solid' },
+  { id:'cyber',   name:'赛博暗黑', bg:['#040405','#0b120b'], accent:['#c8ff00','#00ffb3'], ink:'#ffffff', dark:true,  deco:'dots',    anchor:'bottom', fill:'solid' },
+  { id:'candy',   name:'糖果活力', bg:['#ff7ac0','#6a2cff'], accent:['#fff27a','#ffffff'], ink:'#ffffff', dark:true,  deco:'blob',    anchor:'bottom', fill:'solid' },
+  { id:'fluid',   name:'流体渐变', bg:['#0b1220','#1e3a8a'], accent:['#38bdf8','#c084fc'], ink:'#ffffff', dark:true,  deco:'blob',    anchor:'bottom', fill:'gradient' },
+  { id:'retro',   name:'复古波普', bg:['#fdf0d5','#edd4ab'], accent:['#c1121f','#003049'], ink:'#12203a', dark:false, deco:'rings',   anchor:'bottom', fill:'gradient' },
+  { id:'deep',    name:'深空蓝',   bg:['#01030c','#0a1a35'], accent:['#9ec5ff','#f0abfc'], ink:'#ffffff', dark:true,  deco:'dots',    anchor:'bottom', fill:'gradient' },
+  { id:'glass',   name:'玻璃拟态', bg:['#1c1f2b','#332f4a'], accent:['#a5b4fc','#f0abfc'], ink:'#ffffff', dark:true,  deco:'blob',    anchor:'center', fill:'solid' },
+];
+
+const state = {
+  title: '**AI 编程**效率翻倍\n我实测了 5 个工具',
+  sub: '附完整对比表 · 新手也能上手',
+  brand: '',
+  tpl: 0,
+  ratio: 'land',
+  seed: 7,
+};
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('cv');
+const stage = $('stage');
+
+/* ---------------- 工具函数 ---------------- */
+
+const dims = () => state.ratio === 'port' ? [1080, 1920] : [1920, 1080];
+const fontStr = (size, weight = 800) => `${weight} ${size}px ${FONT}`;
+
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* 把 **强调** 解析成带标记的文本片段 */
+function parseRuns(text) {
+  const runs = [];
+  let accent = false, buf = '';
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '*' && text[i + 1] === '*') {
+      if (buf) { runs.push({ text: buf, accent }); buf = ''; }
+      accent = !accent;
+      i++;
+    } else {
+      buf += text[i];
+    }
+  }
+  if (buf) runs.push({ text: buf, accent });
+  return runs;
+}
+
+/* 中文按字、英文/数字按词切分 */
+function rawTokenize(str) {
+  const out = [];
+  let buf = '';
+  const flush = () => { if (buf) { out.push(buf); buf = ''; } };
+  for (const ch of str) {
+    if (ch === '\n') { flush(); out.push('\n'); continue; }
+    if (/[A-Za-z0-9'’"\-.,:!?&%$#@+/()]/.test(ch)) buf += ch;
+    else { flush(); out.push(ch); }
+  }
+  flush();
+  return out;
+}
+
+function buildTokens(text) {
+  const tokens = [];
+  for (const run of parseRuns(text)) {
+    for (const raw of rawTokenize(run.text)) {
+      if (raw === '\n') { tokens.push({ nl: true }); continue; }
+      tokens.push({ s: raw, accent: run.accent });
+    }
+  }
+  return tokens;
+}
+
+function sumW(ctx, line) {
+  let s = 0;
+  for (const t of line) s += ctx.measureText(t.s).width;
+  return s;
+}
+
+/* 一段文字（无换行符）按均衡宽度折行，再微调避免最后一行孤字 */
+function breakSegment(ctx, seg, maxW) {
+  let total = 0;
+  for (const t of seg) total += ctx.measureText(t.s).width;
+  if (total <= maxW) return [seg.slice()];
+
+  const n = Math.ceil(total / maxW);
+  const target = total / n;
+  const lines = [[]];
+  let cur = 0;
+
+  for (const t of seg) {
+    const w = ctx.measureText(t.s).width;
+    const tooWide = cur + w > maxW;
+    const overTarget = cur + w > target && cur > target * 0.5 && lines.length < n;
+    if ((tooWide || overTarget) && cur > 0) {
+      lines.push([]);
+      cur = 0;
+      if (t.s === ' ') continue;
+    }
+    lines[lines.length - 1].push(t);
+    cur += w;
+  }
+
+  // 把末尾 token 往前搬，直到相邻两行宽度最接近
+  for (let i = lines.length - 1; i > 0; i--) {
+    const a = lines[i - 1], b = lines[i];
+    for (let guard = 0; guard < 24 && a.length > 1; guard++) {
+      const wa = sumW(ctx, a), wb = sumW(ctx, b);
+      const tw = ctx.measureText(a[a.length - 1].s).width;
+      if (wb + tw > maxW) break;
+      if (Math.abs(wa - wb) <= Math.abs(wa - tw - (wb + tw))) break;
+      b.unshift(a.pop());
+    }
+  }
+
+  // 避头：标点不落在行首，悬挂到上一行末尾
+  for (let i = 1; i < lines.length; i++) {
+    while (lines[i].length && NO_START.includes(lines[i][0].s)) {
+      lines[i - 1].push(lines[i].shift());
+    }
+  }
+  return lines.filter((l) => l.length);
+}
+
+/* 按用户换行符分段，每段独立折行，返回行和每段末行的下标 */
+function layoutAll(ctx, tokens, maxW) {
+  const segs = [[]];
+  for (const t of tokens) {
+    if (t.nl) segs.push([]);
+    else segs[segs.length - 1].push(t);
+  }
+  const lines = [];
+  const tail = [];
+  for (const seg of segs) {
+    if (!seg.length) continue;
+    for (const l of breakSegment(ctx, seg, maxW)) lines.push(l);
+    tail.push(lines.length - 1);
+  }
+  return { lines, tail };
+}
+
+function hasOrphan(ctx, lines, tail, maxW) {
+  let start = 0;
+  for (const end of tail) {
+    if (end > start && sumW(ctx, lines[end]) < maxW * 0.28) return true;
+    start = end + 1;
+  }
+  return false;
+}
+
+/* 自上而下找最大的、既不溢出也不产生孤字的字号 */
+function fitTitle(ctx, tokens, maxW, maxH, maxSize, minSize) {
+  let best = null;
+  const step = Math.max(1, maxSize * 0.012);
+
+  for (let size = maxSize; size >= minSize; size -= step) {
+    ctx.font = fontStr(size);
+    const { lines, tail } = layoutAll(ctx, tokens, maxW);
+    if (lines.length * size * LINE_RATIO > maxH) continue;
+    if (hasOrphan(ctx, lines, tail, maxW)) continue;
+    best = { size, lines };
+    break;
+  }
+
+  if (!best) {
+    ctx.font = fontStr(minSize);
+    best = { size: minSize, lines: layoutAll(ctx, tokens, maxW).lines };
+  }
+
+  // 兜底：最小字号仍超出最大高度则截断
+  ctx.font = fontStr(best.size);
+  const lh = best.size * LINE_RATIO;
+  const maxLines = Math.max(1, Math.floor(maxH / lh));
+  let lines = best.lines;
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines);
+    const last = lines[maxLines - 1];
+    while (last.length > 1 && ctx.measureText(last.map(t => t.s).join('') + '…').width > maxW) last.pop();
+    last.push({ s: '…', accent: false });
+  }
+  return { size: best.size, lines };
+}
+
+function truncate(ctx, text, maxW) {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let s = text;
+  while (s.length && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+  return s + '…';
+}
+
+function drawLine(ctx, line, x, y, baseFill, accentFill) {
+  let cx = x;
+  for (const t of line) {
+    ctx.fillStyle = t.accent ? accentFill : baseFill;
+    ctx.fillText(t.s, cx, y);
+    cx += ctx.measureText(t.s).width;
+  }
+}
+
+/* ---------------- 绘制 ---------------- */
+
+let noiseCanvas = null;
+function getNoise() {
+  if (noiseCanvas) return noiseCanvas;
+  const n = document.createElement('canvas');
+  n.width = n.height = 180;
+  const nc = n.getContext('2d');
+  const img = nc.createImageData(180, 180);
+  const rnd = mulberry32(99);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = 60 + rnd() * 195;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  nc.putImageData(img, 0, 0);
+  noiseCanvas = n;
+  return n;
+}
+
+function paintBackground(ctx, W, H, tpl) {
+  const g = ctx.createLinearGradient(0, 0, W * 0.55, H);
+  g.addColorStop(0, tpl.bg[0]);
+  g.addColorStop(1, tpl.bg[1]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  if (tpl.dark) {
+    const v = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.15, W / 2, H * 0.5, Math.max(W, H) * 0.8);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function paintDeco(ctx, W, H, tpl, rnd) {
+  const a0 = tpl.accent[0], a1 = tpl.accent[1];
+
+  if (tpl.deco === 'grid') {
+    const step = W * 0.045;
+    ctx.strokeStyle = hexA(a0, 0.12);
+    ctx.lineWidth = Math.max(1, W * 0.0012);
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = 0; y <= H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+  }
+
+  if (tpl.deco === 'dots') {
+    const step = W * 0.056;
+    const r = W * 0.0022;
+    ctx.fillStyle = hexA(a0, 0.22);
+    for (let x = step / 2; x < W; x += step) {
+      for (let y = step / 2; y < H; y += step) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  if (tpl.deco === 'stripes') {
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(-Math.PI / 9 + (rnd() - 0.5) * 0.25);
+    ctx.fillStyle = hexA(a0, 0.09);
+    const sw = W * 0.05;
+    for (let x = -W * 1.2; x < W * 1.2; x += sw * 2.6) ctx.fillRect(x, -H, sw, H * 2);
+    ctx.restore();
+  }
+
+  if (tpl.deco === 'rings') {
+    const cx = W * (0.85 + rnd() * 0.08), cy = H * (0.14 + rnd() * 0.08);
+    ctx.lineWidth = Math.max(2, W * 0.004);
+    for (let i = 1; i <= 5; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, i * W * 0.058, 0, Math.PI * 2);
+      ctx.strokeStyle = hexA(i % 2 ? a0 : a1, 0.18);
+      ctx.stroke();
+    }
+  }
+
+  if (tpl.deco === 'blob') {
+    const blobs = [
+      { x: W * (0.78 + rnd() * 0.14), y: H * (0.16 + rnd() * 0.14), r: W * 0.55, c: a0, a: 0.5 },
+      { x: W * (0.12 + rnd() * 0.14), y: H * (0.8 + rnd() * 0.12), r: W * 0.46, c: a1, a: 0.38 },
+    ];
+    for (const b of blobs) {
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      g.addColorStop(0, hexA(b.c, b.a));
+      g.addColorStop(0.55, hexA(b.c, b.a * 0.35));
+      g.addColorStop(1, hexA(b.c, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  if (tpl.deco === 'none') {
+    ctx.strokeStyle = hexA(tpl.ink, 0.14);
+    ctx.lineWidth = Math.max(2, W * 0.0022);
+    ctx.beginPath();
+    ctx.moveTo(W * 0.94, 0);
+    ctx.lineTo(W * 0.94, H);
+    ctx.stroke();
+  }
+}
+
+function paintNoise(ctx, W, H, tpl) {
+  const pat = ctx.createPattern(getNoise(), 'repeat');
+  if (!pat) return;
+  ctx.save();
+  ctx.globalAlpha = tpl.dark ? 0.045 : 0.06;
+  ctx.fillStyle = pat;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+function paintWatermark(ctx, W, H, tpl) {
+  const mark = state.title.replace(/\*\*/g, '').replace(/\s/g, '').slice(0, 2) || '封面';
+  ctx.save();
+  ctx.globalAlpha = tpl.dark ? 0.075 : 0.06;
+  ctx.fillStyle = tpl.accent[0];
+  ctx.font = fontStr(W * 0.44);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText(mark, W * 1.02, -W * 0.04);
+  ctx.restore();
+}
+
+function paintContent(ctx, W, H, tpl, portrait, rnd) {
+  const ink = tpl.ink;
+  const pad = portrait ? W * 0.085 : W * 0.058;
+  const maxW = W - pad * 2;
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+
+  // 频道名（左上角）
+  const brand = state.brand.trim();
+  if (brand) {
+    const bs = W * 0.022;
+    ctx.font = fontStr(bs, 700);
+    const barW = bs * 0.3;
+    ctx.fillStyle = tpl.accent[0];
+    ctx.fillRect(pad, pad - bs * 0.48, barW, bs);
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = ink;
+    ctx.fillText(truncate(ctx, brand, maxW * 0.6), pad + barW + bs * 0.55, pad - bs * 0.5);
+    ctx.restore();
+  }
+
+  // 标题
+  const tokens = buildTokens(state.title.trim() || '你的视频主题');
+  const maxSize = W * (portrait ? 0.125 : 0.108);
+  const minSize = W * 0.034;
+  const maxH = H * (portrait ? 0.34 : 0.52);
+  const fit = fitTitle(ctx, tokens, maxW, maxH, maxSize, minSize);
+  const size = fit.size;
+  const lines = fit.lines;
+  const lineH = size * LINE_RATIO;
+  const titleH = lines.length * lineH;
+
+  ctx.font = fontStr(size);
+
+  // 副标题
+  const sub = state.sub.trim();
+  const subSize = Math.min(Math.max(size * 0.36, W * 0.022), W * 0.046);
+  const subGap = size * 0.34;
+  const subH = sub ? subSize * 1.5 : 0;
+
+  const barH = size * 0.085;
+  const barGap = size * 0.36;
+  const totalH = barH + barGap + titleH + (sub ? subGap + subH : 0);
+
+  let y;
+  if (portrait) y = (H - totalH) * 0.42;
+  else if (tpl.anchor === 'center') y = (H - totalH) / 2;
+  else if (tpl.anchor === 'top') y = pad;
+  else y = H - pad - totalH;
+
+  const x = pad;
+
+  // 强调线
+  ctx.fillStyle = tpl.accent[0];
+  ctx.fillRect(x, y, size * 1.1, barH);
+
+  let cy = y + barH + barGap;
+
+  // 文字阴影副本（避免逐字 shadow 叠加变脏）
+  if (tpl.dark) {
+    const sh = size * 0.05;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    for (let i = 0; i < lines.length; i++) {
+      drawLine(ctx, lines[i], x + sh, cy + i * lineH + sh, 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.45)');
+    }
+  }
+
+  // 标题正文
+  for (let i = 0; i < lines.length; i++) {
+    const ly = cy + i * lineH;
+    let fill;
+    if (tpl.fill === 'gradient') {
+      const g = ctx.createLinearGradient(0, ly, 0, ly + size);
+      g.addColorStop(0, tpl.accent[0]);
+      g.addColorStop(1, tpl.accent[1]);
+      fill = g;
+    } else {
+      fill = ink;
+    }
+    drawLine(ctx, lines[i], x, ly, fill, tpl.fill === 'gradient' ? tpl.accent[1] : tpl.accent[0]);
+  }
+
+  cy += titleH;
+
+  // 副标题
+  if (sub) {
+    ctx.font = fontStr(subSize, 500);
+    ctx.save();
+    ctx.globalAlpha = 0.74;
+    ctx.fillStyle = ink;
+    ctx.fillText(truncate(ctx, sub, maxW), x, cy + subGap);
+    ctx.restore();
+  }
+}
+
+function draw(ctx, W, H, scale) {
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const tpl = TEMPLATES[state.tpl];
+  const portrait = H > W;
+  const rnd = mulberry32(state.seed);
+
+  paintBackground(ctx, W, H, tpl);
+  paintDeco(ctx, W, H, tpl, rnd);
+  paintNoise(ctx, W, H, tpl);
+  paintWatermark(ctx, W, H, tpl);
+  paintContent(ctx, W, H, tpl, portrait, rnd);
+}
+
+/* ---------------- 预览尺寸 ---------------- */
+
+function redraw() {
+  const [w, h] = dims();
+  const availW = Math.max(160, stage.clientWidth - 80);
+  const availH = Math.max(120, stage.clientHeight - 80);
+  const s = Math.min(availW / w, availH / h);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  canvas.style.width = Math.round(w * s) + 'px';
+  canvas.style.height = Math.round(h * s) + 'px';
+  canvas.width = Math.round(w * s * dpr);
+  canvas.height = Math.round(h * s * dpr);
+
+  draw(canvas.getContext('2d'), w, h, s * dpr);
+}
+
+/* ---------------- 导出 ---------------- */
+
+function safeName(s) {
+  return s.replace(/\*\*/g, '').replace(/[\n\r]/g, ' ').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 20) || '视频封面';
+}
+
+function savePNG() {
+  const [w, h] = dims();
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  draw(c.getContext('2d'), w, h, 1);
+
+  const a = document.createElement('a');
+  a.href = c.toDataURL('image/png');
+  a.download = safeName(state.title) + '.png';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* ---------------- UI ---------------- */
+
+const tpls = $('tpls');
+tpls.innerHTML = TEMPLATES.map((t, i) => `
+  <div class="tpl${i === 0 ? ' on' : ''}" data-i="${i}"
+       style="background:linear-gradient(135deg,${t.bg[0]},${t.bg[1]})">
+    <span style="color:${t.ink}">${t.name}</span>
+    <i style="background:${t.accent[0]}"></i>
+  </div>
+`).join('');
+
+tpls.addEventListener('click', (e) => {
+  const el = e.target.closest('.tpl');
+  if (!el) return;
+  state.tpl = +el.dataset.i;
+  tpls.querySelectorAll('.tpl').forEach((n) => n.classList.toggle('on', n === el));
+  redraw();
+});
+
+$('ratioSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  state.ratio = b.dataset.r;
+  $('ratioSeg').querySelectorAll('button').forEach((n) => n.classList.toggle('on', n === b));
+  redraw();
+});
+
+$('title').value = state.title;
+$('sub').value = state.sub;
+
+$('title').addEventListener('input', (e) => { state.title = e.target.value; redraw(); });
+$('sub').addEventListener('input', (e) => { state.sub = e.target.value; redraw(); });
+$('brand').addEventListener('input', (e) => { state.brand = e.target.value; redraw(); });
+
+$('shuffle').addEventListener('click', () => {
+  state.seed = Math.floor(Math.random() * 1e6) + 1;
+  redraw();
+});
+
+$('save').addEventListener('click', savePNG);
+
+new ResizeObserver(redraw).observe(stage);
+
+redraw();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(redraw);
+</script>
+</body>
+</html>
